@@ -3,13 +3,11 @@ import pandas as pd
 import requests
 import time
 import re
-
-
+from datetime import datetime
 
 #This isn't for me, GPT writes horrible code though and I want to silence this
 #Annoying warning
 pd.set_option('chained_assignment',None)
-
 
 '''
 How this works:
@@ -73,7 +71,9 @@ api_bot_chat = [{"role": "user", "content":
 eda_bot_chat_og = [{"role": "user", "content": 
                     """
                     You are a large language model trained to take in the first 5 rows of data frome a dataframe along with some context and come up with the best 3
-                    exploratory data analysis ideas. The ideas should be fairly simple and able to be done in a couple lines of python code. examples include making a matplotlib graph, group by statements, etc.
+                    exploratory data analysis ideas. The ideas should be fairly simple and able to be done in a couple lines of python code. examples include making a matplotlib graph, group by statements, etc. 
+                    
+                    If your python code does not display your results
                     
                     Only output 3 and only 3 ideas, and below each idea place the python code for how to do it. 
                     
@@ -99,7 +99,8 @@ def predict(model_type_chat, user_input):
     
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=model_type_chat)
+        messages=model_type_chat,
+        temperature = .2)
     
     reply_txt = response.choices[0].message.content
     
@@ -168,7 +169,7 @@ while True:
     api_num_tries = 0 
     
     #If the messenger chat bot hasn't triggered API bot, continue on with the conversation    
-    if not response.startswith('API'):
+    if not response.startswith('API') or not 'API -' in response:
         print()
         fake_typing(response)
     
@@ -195,19 +196,29 @@ while True:
                     api_data['Value'] = api_data['Value'].str.replace('()', '', regex=False)
                     api_data['Value'] = pd.to_numeric(api_data['Value'], errors= "coerce")
                 
+                
+                print()
                 fake_typing(f"Data successfully pulled from NASS API with {api_data.shape[0]} rows and {api_data.shape[1]} columns")
             
             
+                data_out_string = '~/data/tmp/' + 'AgCensus_GPT_Data_' + datetime.now().strftime('%m%d%y') + '.csv'
+                print()
+                print(f"Saving your data to {data_out_string}")
+
+                api_data.to_csv(rf'{data_out_string}', index=False)
+                
             
                 #Make a copy since we don't want to have a super long chat log
                 eda_bot_chat = eda_bot_chat_og.copy()
             
+                print()
                 fake_typing("Now generating some cool potential analyses!\n")
             
                 df_head = api_data.head().to_json(orient='records')[1:-1].replace('},{', '} {')
 
-                eda_output = predict(model_type_chat = eda_bot_chat, user_input = f"what kind of analysis could I do on a dataframe from USDA NASS that {response}. The data looks like like: {df_head}")
+                eda_output = predict(model_type_chat = eda_bot_chat, user_input = f"what kind of analysis could I do on a dataframe from USDA NASS that {response} Ensure your python code prints the output. The data looks like like: {df_head}")
                 ideas = re.sub("\n```python.*?\n```", '', eda_output, flags=re.DOTALL)
+                print()
                 fake_typing(ideas)
 
             
@@ -264,6 +275,7 @@ while True:
                     api_bot_chat.append({"role": "user", "content": "Please try again, I got an error using that link"})
                 
                 elif api_data == 'Too much data requested':
+                    print()
                     fake_typing("I'm sorry, your request exceeds the NASS API. Please limit your request and try again.")
                     break
                 
@@ -271,6 +283,7 @@ while True:
                     api_bot_chat.append({"role": "user", "content": "Please try again, I got some unknown error using that link"})
                 
     if api_num_tries >= num_retries:
+        print()
         fake_typing("I'm sorry, but I'm unable to get that data. Can you try again?")
             
 
